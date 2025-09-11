@@ -1,0 +1,85 @@
+// go run main.go <время в секундах int>
+// Код из прошлой задачи с одним воркером и таймером.
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"strconv"
+	"sync"
+	"syscall"
+	"time"
+)
+
+// Воркер читает канал, пишет в стандартный вывод
+func worker(id int, dataChan <-chan int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for num := range dataChan {
+		fmt.Printf("Воркер %d: %d\n", id, num)
+	}
+	fmt.Printf("Воркер %d завершил работу\n", id)
+}
+
+func main() {
+	if len(os.Args) != 2 {
+		log.Fatal("Необходимо указать только время работы в секундах")
+	}
+
+	/*
+		numWorkers, err := strconv.Atoi(os.Args[1])
+		if err != nil {
+			log.Fatalf("Ошибка, количество воркеров должно быть int: %v", err)
+		}
+	*/
+
+	numWorkers := 1
+
+	duration, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		log.Fatalf("Ошибка, время работы должно быть int: %v", err)
+	}
+
+	dataChan := make(chan int)
+	var wg sync.WaitGroup
+
+	// Создание воркеров
+	for i := 1; i <= numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, dataChan, &wg)
+	}
+
+	// Обработка сигнала останова
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	//Таймер
+	timer := time.NewTimer(time.Duration(duration) * time.Second)
+	defer timer.Stop()
+
+	// Главная горутина, пишет счётчик в канал
+	go func() {
+		counter := 0
+		for {
+			select {
+			case <-sigChan:
+				// Сигнал завершения (ctrl+C)
+				close(dataChan)
+				return
+			case <-timer.C:
+				// Таймер истек
+				fmt.Printf("Время работы истекло (%d секунд)\n", duration)
+				close(dataChan)
+				return
+			default:
+				dataChan <- counter
+				counter++
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}()
+
+	wg.Wait()
+	fmt.Println("Все воркеры завершили работу. Программа завершена.")
+}
