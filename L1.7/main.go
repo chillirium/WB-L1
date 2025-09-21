@@ -12,7 +12,7 @@ type SafeMap struct {
 	data map[string]int
 }
 
-// создание нового экземпляра экземпляр
+// создание нового экземпляра
 func NewSafeMap() *SafeMap {
 	return &SafeMap{
 		data: make(map[string]int),
